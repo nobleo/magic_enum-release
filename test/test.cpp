@@ -1,6 +1,6 @@
 // Licensed under the MIT License <http://opensource.org/licenses/MIT>.
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2019 - 2021 Daniil Goncharov <neargye@gmail.com>.
+// Copyright (c) 2019 - 2022 Daniil Goncharov <neargye@gmail.com>.
 //
 // Permission is hereby  granted, free of charge, to any  person obtaining a copy
 // of this software and associated  documentation files (the "Software"), to deal
@@ -28,6 +28,7 @@
 #undef  MAGIC_ENUM_RANGE_MAX
 #define MAGIC_ENUM_RANGE_MAX 120
 #include <magic_enum.hpp>
+#include <magic_enum_fuse.hpp>
 
 #include <array>
 #include <cctype>
@@ -35,6 +36,15 @@
 #include <sstream>
 
 enum class Color { RED = -12, GREEN = 7, BLUE = 15 };
+template <>
+constexpr magic_enum::customize::customize_t magic_enum::customize::enum_name<Color>(Color value) noexcept {
+  switch (value) {
+    case Color::RED:
+      return "red";
+    default:
+      return default_tag;
+  }
+}
 
 enum class Numbers : int { one = 1, two, three, many = 127 };
 
@@ -75,7 +85,7 @@ struct magic_enum::customize::enum_range<number> {
 
 enum class MaxUsedAsInvalid : std::uint8_t {
   ONE,
-  TWO,
+  TWO = 63,
   INVALID = std::numeric_limits<std::uint8_t>::max()
 };
 template <>
@@ -94,15 +104,7 @@ struct magic_enum::customize::enum_range<Binary> {
   static constexpr int max = 64;
 };
 
-template <>
-constexpr std::string_view magic_enum::customize::enum_name<Color>(Color value) noexcept {
-  switch (value) {
-    case Color::RED:
-      return "red";
-    default:
-      return {};
-  }
-}
+enum class BoolTest : bool { Yay, Nay };
 
 using namespace magic_enum;
 
@@ -158,6 +160,8 @@ TEST_CASE("enum_cast") {
     constexpr auto crc = magic_enum::enum_cast<crc_hack_2>("b5a7b602ab754d7ab30fb42c4fb28d82");
     REQUIRE(crc.value() == crc_hack_2::b5a7b602ab754d7ab30fb42c4fb28d82);
     REQUIRE(magic_enum::enum_cast<crc_hack_2>("d19f2e9e82d14b96be4fa12b8a27ee9f").value() == crc_hack_2::d19f2e9e82d14b96be4fa12b8a27ee9f);
+
+    REQUIRE(magic_enum::enum_cast<BoolTest>("Nay").has_value());
   }
 
   SECTION("integer") {
@@ -197,6 +201,9 @@ TEST_CASE("enum_cast") {
     REQUIRE(nt.value() == number::three);
     REQUIRE_FALSE(enum_cast<number>(400).has_value());
     REQUIRE_FALSE(enum_cast<number>(0).has_value());
+
+    REQUIRE(enum_cast<BoolTest>(false).has_value());
+    REQUIRE(enum_cast<BoolTest>(0).has_value());
   }
 }
 
@@ -240,6 +247,8 @@ TEST_CASE("enum_integer") {
   REQUIRE(nt == 300);
   REQUIRE(enum_integer(number::four) == 400);
   REQUIRE(enum_integer(static_cast<number>(0)) == 0);
+
+  REQUIRE(enum_integer(BoolTest::Yay) == false);
 }
 
 TEST_CASE("enum_index") {
@@ -286,6 +295,8 @@ TEST_CASE("enum_index") {
   REQUIRE(nt.value() == 2);
   REQUIRE_FALSE(enum_index(number::four).has_value());
   REQUIRE_FALSE(enum_index(static_cast<number>(0)).has_value());
+
+  REQUIRE(enum_index<BoolTest::Yay>() == 0);
 }
 
 TEST_CASE("enum_contains") {
@@ -329,6 +340,8 @@ TEST_CASE("enum_contains") {
     REQUIRE(nt);
     REQUIRE_FALSE(enum_contains(number::four));
     REQUIRE_FALSE(enum_contains(static_cast<number>(0)));
+
+    REQUIRE(enum_contains(BoolTest::Yay));
   }
 
   SECTION("integer") {
@@ -369,6 +382,9 @@ TEST_CASE("enum_contains") {
     REQUIRE_FALSE(enum_contains<number>(number::four));
     REQUIRE_FALSE(enum_contains<number>(111));
     REQUIRE_FALSE(enum_contains<number>(0));
+
+    REQUIRE(enum_contains<BoolTest>(false));
+    REQUIRE(enum_contains<BoolTest>(0));
   }
 
   SECTION("string") {
@@ -413,6 +429,8 @@ TEST_CASE("enum_contains") {
     REQUIRE(nt);
     REQUIRE_FALSE(enum_contains<number>("four"));
     REQUIRE_FALSE(enum_contains<number>("None"));
+
+    REQUIRE(enum_contains<BoolTest>("Yay"));
   }
 }
 
@@ -462,6 +480,9 @@ TEST_CASE("enum_value") {
   REQUIRE(enum_value<number, 0>() == number::one);
   REQUIRE(enum_value<number, 1>() == number::two);
   REQUIRE(enum_value<number, 2>() == number::three);
+
+  REQUIRE(enum_value<BoolTest>(0) == BoolTest::Yay);
+  REQUIRE(enum_value<BoolTest, 0>() == BoolTest::Yay);
 }
 
 TEST_CASE("enum_values") {
@@ -562,6 +583,8 @@ TEST_CASE("enum_name") {
     REQUIRE(nt_name == "three");
     REQUIRE(enum_name(number::four).empty());
     REQUIRE(enum_name(static_cast<number>(0)).empty());
+
+    REQUIRE(enum_name(MaxUsedAsInvalid::ONE) == "ONE");
   }
 
   SECTION("static storage") {
@@ -650,10 +673,11 @@ TEST_CASE("enum_entries") {
 }
 
 TEST_CASE("ostream_operators") {
-  auto test_ostream = [](auto e, std::string_view name) {
+  auto test_ostream = [](auto e, std::string name) {
     using namespace magic_enum::ostream_operators;
     std::stringstream ss;
     ss << e;
+    REQUIRE(ss);
     REQUIRE(ss.str() == name);
   };
 
@@ -692,6 +716,36 @@ TEST_CASE("ostream_operators") {
   test_ostream(number::four, "400");
   test_ostream(static_cast<number>(0), "0");
   test_ostream(std::make_optional(static_cast<number>(0)), "0");
+}
+
+TEST_CASE("istream_operators") {
+  auto test_istream = [](const auto e, std::string name) {
+    using namespace magic_enum::istream_operators;
+    std::istringstream ss(name);
+    std::decay_t<decltype(e)> v;
+    ss >> v;
+    REQUIRE(ss);
+    REQUIRE(v == e);
+  };
+
+  test_istream(Color::GREEN, "GREEN");
+  test_istream(Color::BLUE, "BLUE");
+
+  test_istream(Numbers::two, "two");
+  test_istream(Numbers::three, "three");
+
+  test_istream(Directions::Down, "Down");
+  test_istream(Directions::Right, "Right");
+  test_istream(Directions::Left, "Left");
+
+#if defined(MAGIC_ENUM_ENABLE_NONASCII)
+  test_istream(Language::한국어, "한국어");
+  test_istream(Language::English, "English");
+  test_istream(Language::😃, "😃");
+#endif
+
+  test_istream(number::two, "two");
+  test_istream(number::three, "three");
 }
 
 TEST_CASE("bitwise_operators") {
@@ -938,7 +992,7 @@ TEST_CASE("extrema") {
     REQUIRE(magic_enum::detail::max_v<Binary> == true);
 
     REQUIRE(magic_enum::detail::reflected_max_v<MaxUsedAsInvalid, false> == 64);
-    REQUIRE(magic_enum::detail::max_v<MaxUsedAsInvalid> == 1);
+    REQUIRE(magic_enum::detail::max_v<MaxUsedAsInvalid> == 63);
   }
 }
 
@@ -1019,6 +1073,61 @@ TEST_CASE("cmp_less") {
   }
 }
 
+template <Color C>
+constexpr std::string_view DoWork() {
+  return "default";
+}
+
+template <>
+constexpr std::string_view DoWork<Color::GREEN>() {
+  return "override";
+}
+
+TEST_CASE("enum_switch") {
+  constexpr auto bind_enum_switch = [] (Color c) {
+
+    return enum_switch([](auto val) {
+      return DoWork<val>();
+    }, c, string_view{"unrecognized"});
+
+  };
+
+  constexpr auto def = bind_enum_switch(Color::BLUE);
+  REQUIRE(def == "default");
+  REQUIRE(bind_enum_switch(Color::RED) == "default");
+  REQUIRE(bind_enum_switch(Color::GREEN) == "override");
+  REQUIRE(bind_enum_switch(static_cast<Color>(0)) == "unrecognized");
+}
+
+TEST_CASE("enum_for_each") {
+  SECTION("no return type") {
+    underlying_type_t<Color> sum{};
+    enum_for_each<Color>([&sum](auto val) {
+      constexpr underlying_type_t<Color> v = enum_integer(val());
+      sum += v;
+    });
+    REQUIRE(sum == 10);
+  }
+
+  SECTION("same return type") {
+    constexpr auto workResults = enum_for_each<Color>([](auto val) {
+      return DoWork<val>();
+    });
+    REQUIRE(workResults == std::array<std::string_view, 3>{"default", "override", "default"});
+  }
+
+  SECTION("different return type") {
+    constexpr auto colorInts = enum_for_each<Color>([](auto val) {
+      return val;
+    });
+
+    REQUIRE(std::is_same_v<std::remove_const_t<decltype(colorInts)>,
+                           std::tuple<enum_constant<Color::RED>,
+                                      enum_constant<Color::GREEN>,
+                                      enum_constant<Color::BLUE>>>);
+  }
+}
+
 #if defined(__clang__) && __clang_major__ >= 5 || defined(__GNUC__) && __GNUC__ >= 9 || defined(_MSC_VER) && _MSC_VER >= 1920
 #  define MAGIC_ENUM_SUPPORTED_CONSTEXPR_FOR 1
 #endif
@@ -1047,7 +1156,7 @@ TEST_CASE("constexpr_for") {
   });
 }
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER)
 # pragma warning(push)
 # pragma warning(disable : 4064)
 #endif
@@ -1076,7 +1185,7 @@ static int switch_case_3d(Color color, Directions direction, Index index) {
   }
 }
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER)
 #  pragma warning(pop)
 #endif
 
@@ -1089,6 +1198,16 @@ TEST_CASE("multdimensional-switch-case") {
   REQUIRE(switch_case_3d(Color::BLUE, Directions::Up, Index::zero) == 2);
   REQUIRE(switch_case_3d(Color::BLUE, Directions::Up, Index::one) == 0);
   REQUIRE(switch_case_3d(Color::BLUE, Directions::Up, Index::two) == 0);
+}
+
+#endif
+
+#if defined(__cpp_lib_format)
+
+#include <magic_enum_format.hpp>
+
+TEST_CASE("format-base") {
+  REQUIRE(std::format("Test-{:~^10}.", Color::RED) == "Test-~~~red~~~~.");
 }
 
 #endif
