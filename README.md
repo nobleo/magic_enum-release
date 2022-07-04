@@ -1,3 +1,5 @@
+[![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/banner2-direct.svg)](https://bit.ly/3OMysM8)
+
 ```text
  __  __             _        ______                          _____
 |  \/  |           (_)      |  ____|                        / ____|_     _
@@ -17,8 +19,6 @@
 [![Try online](https://img.shields.io/badge/try-online-blue.svg)](https://wandbox.org/permlink/JPMZqT9mgaUdooyC)
 [![Compiler explorer](https://img.shields.io/badge/compiler_explorer-online-blue.svg)](https://godbolt.org/z/BxfmsH)
 
-If you like this project, please consider donating to one of the funds that help victims of the war in Ukraine: https://www.stopputin.net/.
-
 # Magic Enum C++
 
 Header-only C++17 library provides static reflection for enums, work with any enum type without any macro or boilerplate code.
@@ -35,6 +35,8 @@ Header-only C++17 library provides static reflection for enums, work with any en
 * `enum_contains` checks whether enum contains enumerator with such value.
 * `enum_type_name` returns name of enum type.
 * `enum_fuse` allows multidimensional switch/cases.
+* `enum_switch` allows runtime enum value transformation to constexpr context.
+* `enum_for_each` calls a function with all enum constexpr value.
 * `is_unscoped_enum` checks whether type is an [Unscoped enumeration](https://en.cppreference.com/w/cpp/language/enum#Unscoped_enumeration).
 * `is_scoped_enum` checks whether type is an [Scoped enumeration](https://en.cppreference.com/w/cpp/language/enum#Scoped_enumerations).
 * `underlying_type` improved UB-free "SFINAE-friendly" [underlying_type](https://en.cppreference.com/w/cpp/types/underlying_type).
@@ -149,6 +151,24 @@ enum class Color { RED = 2, BLUE = 4, GREEN = 8 };
   // ...
   }
   ```
+  
+* Enum switch runtime value as constexpr constant
+  ```cpp
+  Color color = Color::RED;
+  
+  magic_enum::enum_switch([] (auto val) {
+    constexpr Color c_color = val;
+    // ...
+  }, color);
+  ```
+
+* Enum iterate for each enum as constexpr constant
+  ```cpp
+  magic_enum::enum_for_each<Color>([] (auto val) {
+    constexpr Color c_color = val;
+    // ...
+  });
+  ```
 
 * Ostream operator for enum
 
@@ -259,7 +279,7 @@ enum class Color { RED = 2, BLUE = 4, GREEN = 8 };
 
 ## Compiler compatibility
 
-* Clang/LLVM >= 5
+* Clang/LLVM >= 6
 * MSVC++ >= 14.11 / Visual Studio >= 2017
 * Xcode >= 10
 * GCC >= 9
