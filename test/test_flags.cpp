@@ -1,6 +1,6 @@
 // Licensed under the MIT License <http://opensource.org/licenses/MIT>.
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2019 - 2021 Daniil Goncharov <neargye@gmail.com>.
+// Copyright (c) 2019 - 2022 Daniil Goncharov <neargye@gmail.com>.
 //
 // Permission is hereby  granted, free of charge, to any  person obtaining a copy
 // of this software and associated  documentation files (the "Software"), to deal
@@ -33,6 +33,7 @@
 #include <catch2/catch.hpp>
 
 #include <magic_enum.hpp>
+#include <magic_enum_fuse.hpp>
 
 #include <array>
 #include <cctype>
@@ -598,7 +599,7 @@ TEST_CASE("enum_entries") {
 }
 
 TEST_CASE("ostream_operators") {
-  auto test_ostream = [](auto e, std::string_view name) {
+  auto test_ostream = [](auto e, std::string name) {
     using namespace magic_enum::ostream_operators;
     std::stringstream ss;
     ss << e;
@@ -644,6 +645,42 @@ TEST_CASE("ostream_operators") {
   test_ostream(number::four | number::one, "one|four");
   test_ostream(static_cast<number>(0), "0");
   test_ostream(std::make_optional(static_cast<number>(0)), "0");
+}
+
+TEST_CASE("istream_operators") {
+  auto test_istream = [](const auto e, std::string name) {
+    using namespace magic_enum::istream_operators;
+    std::istringstream ss(name);
+    std::decay_t<decltype(e)> v;
+    ss >> v;
+    REQUIRE(v == e);
+    REQUIRE(ss);
+  };
+
+  test_istream(Color::GREEN, "GREEN");
+  test_istream(Color::BLUE, "BLUE");
+  test_istream(Color::BLUE | Color::RED, "RED|BLUE");
+  test_istream(Color::BLUE | Color::RED | Color::RED, "RED|BLUE");
+
+  test_istream(Numbers::two, "two");
+  test_istream(Numbers::three, "three");
+  test_istream(Numbers::many, "many");
+
+  test_istream(Directions::Down, "Down");
+  test_istream(Directions::Right, "Right");
+  test_istream(Directions::Left, "Left");
+  test_istream(Directions::Right | Directions::Left, "Left|Right");
+
+#if defined(MAGIC_ENUM_ENABLE_NONASCII)
+  test_istream(Language::한국어, "한국어");
+  test_istream(Language::English, "English");
+  test_istream(Language::😃, "😃");
+#endif
+
+  test_istream(number::two, "two");
+  test_istream(number::three, "three");
+  test_istream(number::four, "four");
+  test_istream(number::four | number::one, "one|four");
 }
 
 TEST_CASE("bitwise_operators") {
@@ -782,6 +819,16 @@ TEST_CASE("constexpr_for") {
   constexpr_for<0, magic_enum::enum_count<Color>(), 1>([](auto i) {
     [[maybe_unused]] Foo<Color, magic_enum::enum_value<Color, i>()> bar{};
   });
+}
+
+#endif
+
+#if defined(__cpp_lib_format)
+
+#include <magic_enum_format.hpp>
+
+TEST_CASE("format-base") {
+  REQUIRE(std::format("Test-{:~^11}.", Color::RED | Color::GREEN) == "Test-~RED|GREEN~.");
 }
 
 #endif
