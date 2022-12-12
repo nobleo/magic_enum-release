@@ -1,0 +1,12 @@
+Source: ros-noetic-magic-enum
+Section: misc
+Priority: optional
+Maintainer: Neargye <neargye@gmail.com>
+Build-Depends: debhelper (>= 9.0.0), cmake
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-noetic-magic-enum
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, 
+Description: Static reflection for enums (to string, from string, iteration) for modern C++, work with any enum type without any macro or boilerplate code
