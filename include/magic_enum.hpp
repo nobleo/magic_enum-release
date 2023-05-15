@@ -38,8 +38,9 @@
 
 #include <array>
 #include <cassert>
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <limits>
 #include <type_traits>
 #include <utility>
@@ -77,7 +78,7 @@
 #endif
 
 // Checks magic_enum compiler compatibility.
-#if defined(__clang__) && __clang_major__ >= 5 || defined(__GNUC__) && __GNUC__ >= 9 || defined(_MSC_VER) && _MSC_VER >= 1910
+#if defined(__clang__) && __clang_major__ >= 5 || defined(__GNUC__) && __GNUC__ >= 9 || defined(_MSC_VER) && _MSC_VER >= 1910 || defined(__RESHARPER__)
 #  undef  MAGIC_ENUM_SUPPORTED
 #  define MAGIC_ENUM_SUPPORTED 1
 #endif
@@ -98,6 +99,19 @@
 // If need another max range for all enum types by default, redefine the macro MAGIC_ENUM_RANGE_MAX.
 #if !defined(MAGIC_ENUM_RANGE_MAX)
 #  define MAGIC_ENUM_RANGE_MAX 128
+#endif
+
+// Improve ReSharper C++ intellisense performance with builtins, avoiding unnecessary template instantiations.
+#if defined(__RESHARPER__)
+#  undef MAGIC_ENUM_GET_ENUM_NAME_BUILTIN
+#  undef MAGIC_ENUM_GET_TYPE_NAME_BUILTIN
+#  if __RESHARPER__ >= 20230100
+#    define MAGIC_ENUM_GET_ENUM_NAME_BUILTIN(V) __rscpp_enumerator_name(V)
+#    define MAGIC_ENUM_GET_TYPE_NAME_BUILTIN(T) __rscpp_type_name<T>()
+#  else
+#    define MAGIC_ENUM_GET_ENUM_NAME_BUILTIN(V) nullptr
+#    define MAGIC_ENUM_GET_TYPE_NAME_BUILTIN(T) nullptr
+#  endif
 #endif
 
 namespace magic_enum {
@@ -251,30 +265,37 @@ class static_string<0> {
 };
 
 constexpr string_view pretty_name(string_view name) noexcept {
+  const char* str = name.data();
   for (std::size_t i = name.size(); i > 0; --i) {
-    if (!((name[i - 1] >= '0' && name[i - 1] <= '9') ||
-          (name[i - 1] >= 'a' && name[i - 1] <= 'z') ||
-          (name[i - 1] >= 'A' && name[i - 1] <= 'Z') ||
+    const char c = str[i - 1];
+    if (!((c >= '0' && c <= '9') ||
+          (c >= 'a' && c <= 'z') ||
+          (c >= 'A' && c <= 'Z') ||
 #if defined(MAGIC_ENUM_ENABLE_NONASCII)
-          (name[i - 1] & 0x80) ||
+          (c & 0x80) ||
 #endif
-          (name[i - 1] == '_'))) {
+          (c == '_'))) {
       name.remove_prefix(i);
       break;
     }
   }
 
-  if (name.size() > 0 && ((name[0] >= 'a' && name[0] <= 'z') ||
-                          (name[0] >= 'A' && name[0] <= 'Z') ||
+  if (name.size() > 0) {
+    const char c = name[0];
+    if ((c >= 'a' && c <= 'z') ||
+        (c >= 'A' && c <= 'Z') ||
 #if defined(MAGIC_ENUM_ENABLE_NONASCII)
-                          (name[0]) & 0x80) ||
+        (c & 0x80) ||
 #endif
-                          (name[0] == '_'))) {
-    return name;
+        (c == '_')) {
+      return name;
+    }
   }
+
   return {}; // Invalid name.
 }
 
+template<typename Op = std::equal_to<>>
 class case_insensitive {
   static constexpr char to_lower(char c) noexcept {
     return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + ('a' - 'A')) : c;
@@ -287,7 +308,7 @@ class case_insensitive {
     static_assert(always_false_v<L, R>, "magic_enum::case_insensitive not supported Non-ASCII feature.");
     return false;
 #else
-    return to_lower(lhs) == to_lower(rhs);
+    return Op{}(to_lower(lhs), to_lower(rhs));
 #endif
   }
 };
@@ -401,8 +422,15 @@ constexpr auto n() noexcept {
   static_assert(is_enum_v<E>, "magic_enum::detail::n requires enum type.");
 
   if constexpr (supported<E>::value) {
-#if defined(__clang__) || defined(__GNUC__)
+#if defined(MAGIC_ENUM_GET_TYPE_NAME_BUILTIN)
+    constexpr auto name_ptr = MAGIC_ENUM_GET_TYPE_NAME_BUILTIN(E);
+    constexpr auto name = name_ptr ? string_view{ name_ptr } : std::string_view{};
+#elif defined(__clang__)
     constexpr auto name = pretty_name({__PRETTY_FUNCTION__, sizeof(__PRETTY_FUNCTION__) - 2});
+#elif defined(__GNUC__)
+    auto name = string_view{__PRETTY_FUNCTION__, sizeof(__PRETTY_FUNCTION__) - 1};
+    name.remove_suffix(name[name.size() - 1] == ']' ? 1 : 3);
+    name = pretty_name(name);
 #elif defined(_MSC_VER)
     constexpr auto name = pretty_name({__FUNCSIG__, sizeof(__FUNCSIG__) - 17});
 #else
@@ -442,8 +470,15 @@ constexpr auto n() noexcept {
   static_assert(is_enum_v<E>, "magic_enum::detail::n requires enum type.");
 
   if constexpr (supported<E>::value) {
-#if defined(__clang__) || defined(__GNUC__)
+#if defined(MAGIC_ENUM_GET_ENUM_NAME_BUILTIN)
+    constexpr auto name_ptr = MAGIC_ENUM_GET_ENUM_NAME_BUILTIN(V);
+    constexpr auto name = name_ptr ? string_view{ name_ptr } : std::string_view{};
+#elif defined(__clang__)
     constexpr auto name = pretty_name({__PRETTY_FUNCTION__, sizeof(__PRETTY_FUNCTION__) - 2});
+#elif defined(__GNUC__)
+    auto name = string_view{__PRETTY_FUNCTION__, sizeof(__PRETTY_FUNCTION__) - 1};
+    name.remove_suffix(name[name.size() - 1] == ']' ? 1 : 3);
+    name = pretty_name(name);
 #elif defined(_MSC_VER)
     constexpr auto name = pretty_name({__FUNCSIG__, sizeof(__FUNCSIG__) - 17});
 #else
@@ -1101,7 +1136,7 @@ template <typename E>
 // Obtains index in enum values from enum value.
 // Returns optional with index.
 template <typename E>
-[[nodiscard]] constexpr auto enum_index(E value) noexcept -> detail::enable_if_t<E, optional<std::size_t>> {
+[[nodiscard]] constexpr auto enum_index([[maybe_unused]] E value) noexcept -> detail::enable_if_t<E, optional<std::size_t>> {
   using D = std::decay_t<E>;
   using U = underlying_type_t<D>;
 
@@ -1210,7 +1245,7 @@ template <detail::value_type VT, typename E>
 // Returns name from enum-flags value.
 // If enum-flags value does not have name or value out of range, returns empty string.
 template <typename E>
-[[nodiscard]] auto enum_flags_name(E value) -> detail::enable_if_t<E, string> {
+[[nodiscard]] auto enum_flags_name(E value, [[maybe_unused]] char sep = '|') -> detail::enable_if_t<E, string> {
   using D = std::decay_t<E>;
   static_assert(detail::is_flags_v<D>, "magic_enum::enum_flags_name requires enum-flags type.");
 
@@ -1230,7 +1265,7 @@ template <typename E>
 }
 
 // Allows you to write magic_enum::enum_cast<foo>("bar", magic_enum::case_insensitive);
-inline constexpr auto case_insensitive = detail::case_insensitive{};
+inline constexpr auto case_insensitive = detail::case_insensitive<>{};
 
 // Obtains enum value from integer value.
 // Returns optional with enum value.
