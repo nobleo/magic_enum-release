@@ -70,7 +70,7 @@ tracks:
       :{release_inc} --os-name rhel
     devel_branch: master
     last_release: master
-    last_version: 0.9.3
+    last_version: 0.9.4
     name: upstream
     patches: null
     release_inc: '1'
